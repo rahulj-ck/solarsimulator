@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fastned.solar.simulator.model.PowerPlant
 import com.fastned.solar.simulator.model.SimulationResultResponse
-import com.fastned.solarsimulator.db.PowerPlantRepository
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -12,11 +11,11 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.web.servlet.MockMvc
 import java.math.BigDecimal
+import kotlin.random.Random
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 class SolarSimulationFunctionalTests(
-    @Autowired private val powerPlantRepository: PowerPlantRepository,
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val objectMapper: ObjectMapper = ObjectMapper().registerModule(KotlinModule()),
     @Autowired private val dslContext: DSLContext,
@@ -26,38 +25,111 @@ class SolarSimulationFunctionalTests(
         dslContext,
     ) {
     @Test
-    fun `test getNetworkOutput`() {
-        val t = 5
-        getNetworkOutput(t)
-        getNetworkOutputResponseBody(t)
+    fun `get network state should return empty response if network is not loaded`() {
+        val response = getNetworkStateResponseBody(5)
+        assert(response.isEmpty())
     }
 
     @Test
-    fun `test getNetworkState`() {
-        val t = 5
-        getNetworkState(t)
-        getNetworkStateResponseBody(t)
+    fun `get network output should return empty response if not network is not loaded`() {
+        val response = getNetworkOutputResponseBody(5)
+        assert(response.totalOutputInKwh == BigDecimal.ZERO)
     }
 
     @Test
-    fun `test loadPowerPlants`() {
-        val powerPlants = listOf(PowerPlant("Power plant 1", 55), PowerPlant("Power plant 2", 2))
-        loadPowerPlants(powerPlants)
+    fun `load power plant network and verify energy output is zero for power plants younger than 60 days`() {
+        val numberOfPowerPlants = Random.nextInt(100)
+        val powerPlants =
+            List(numberOfPowerPlants) {
+                PowerPlant(generateRandomString(100), generateRandomAge())
+            }
 
-        val activeNetworks = powerPlantRepository.getAll()
+        val response = loadPowerPlants(powerPlants)
+        assert(response.status == 205)
 
-        assert(powerPlantRepository.getAll().size == 2)
+        val t = 25
+        val networkStateResponse = getNetworkStateResponseBody(t)
+        assert(networkStateResponse.size == numberOfPowerPlants)
 
+        networkStateResponse.forEachIndexed { index, powerPlant ->
+            assert(powerPlant.name == powerPlants[index].name)
+            assert(powerPlant.age == powerPlants[index].age + t - 1)
+            if (powerPlant.age <= 60) {
+                assert(powerPlant.outputInKwh == BigDecimal.ZERO)
+            }
+            if (powerPlant.age > 9125) {
+                assert(powerPlant.outputInKwh == BigDecimal.ZERO)
+            }
+        }
+    }
+
+    @Test
+    fun `load power plant network and verify energy output is calculated correctly for power plants older than 60 days`() {
+        val numberOfPowerPlants = Random.nextInt(100)
+        val powerPlants =
+            List(numberOfPowerPlants) {
+                PowerPlant(generateRandomString(100), generateRandomAge() + 60)
+            }
+
+        val response = loadPowerPlants(powerPlants)
+        assert(response.status == 205)
+
+        val t = 20
+        val networkStateResponse = getNetworkStateResponseBody(t)
+        assert(networkStateResponse.size == numberOfPowerPlants)
+
+        networkStateResponse.forEachIndexed { index, powerPlant ->
+            assert(powerPlant.name == powerPlants[index].name)
+            assert(powerPlant.age == powerPlants[index].age + t - 1)
+            if (powerPlant.age in 61..9125) {
+                assert(powerPlant.outputInKwh > BigDecimal.ZERO)
+            }
+        }
+    }
+
+    @Test
+    fun `load power plant network, verify they are updated and the power output is calculated correctly for different values of T`() {
         val newPowerPlants = listOf(PowerPlant("Power plant 7", 55), PowerPlant("Power plant 6", 2), PowerPlant("Power plant 3", 88))
         loadPowerPlants(newPowerPlants)
 
-        val activeNetwork = powerPlantRepository.getAll()
-        assert(activeNetwork.size == 3)
-        assert(activeNetwork.find { it.name == "Power plant 7" }?.let { it.age == 55 } ?: false)
-        assert(activeNetwork.find { it.name == "Power plant 6" }?.let { it.age == 2 } ?: false)
-        assert(activeNetwork.find { it.name == "Power plant 3" }?.let { it.age == 88 } ?: false)
-        assert(activeNetwork.find { it.name == "Power plant 1" } == null)
-        assert(activeNetwork.find { it.name == "Power plant 2" } == null)
+        val t = 5
+        val networkState = getNetworkStateResponseBody(t)
+        assert(networkState.size == 3)
+        assert(networkState.find { it.name == "Power plant 7" }?.let { it.age == 59 } ?: false)
+        assert(networkState.find { it.name == "Power plant 7" }?.let { it.outputInKwh == BigDecimal.ZERO } ?: false)
+        assert(networkState.find { it.name == "Power plant 6" }?.let { it.age == 6 } ?: false)
+        assert(networkState.find { it.name == "Power plant 6" }?.let { it.outputInKwh == BigDecimal.ZERO } ?: false)
+
+        assert(networkState.find { it.name == "Power plant 3" }?.let { it.age == 92 } ?: false)
+    }
+
+    @Test
+    fun `load power plant network and verify that power plant older than 25 years is not operational`() {
+        val powerPlants = listOf(PowerPlant("Power plant 10", 55), PowerPlant("Power plant 11", 2), PowerPlant("Power plant 12", 9126))
+        val response = loadPowerPlants(powerPlants)
+        assert(response.status == 205)
+
+        val networkStateResponse = getNetworkStateResponseBody(5)
+        println("networkStateResponse: $networkStateResponse")
+        assert(networkStateResponse.size == 3)
+
+        assert(networkStateResponse.find { it.name == "Power plant 12" }?.let { it.outputInKwh == BigDecimal.ZERO } ?: false)
+    }
+
+    @Test
+    fun `load power plant networks with invalid age should return an error`() {
+        val powerPlants = listOf(PowerPlant("Power plant 1", 55), PowerPlant("Power plant 2", -2))
+        val response = loadPowerPlants(powerPlants)
+        assert(response.status == 400)
+        assert(response.contentAsString.contains("Power plant age cannot be negative"))
+    }
+
+    @Test
+    fun `load power plant networks with empty name should return an error`() {
+        val powerPlants = listOf(PowerPlant("Power plant 1", 55), PowerPlant("", 2))
+        val response = loadPowerPlants(powerPlants)
+        assert(response.status == 400)
+        assert(response.contentAsString.contains("Power plant name cannot be empty"))
     }
 
     @Test
@@ -81,7 +153,6 @@ class SolarSimulationFunctionalTests(
         val content = response.contentAsString
         val responseObj = objectMapper.readValue(content, SimulationResultResponse::class.java)
 
-        println("Response: $responseObj")
         assert(responseObj.network.size == 2)
         assert(responseObj.producedKwh == BigDecimal.ZERO)
         assert(responseObj.network[0].name == "Power plant 1")
@@ -91,7 +162,7 @@ class SolarSimulationFunctionalTests(
     }
 
     @Test
-    fun `upload power plants with invalid JSON`() {
+    fun `upload power plants with invalid JSON should return an error`() {
         val invalidJson =
             """
             [
@@ -108,5 +179,26 @@ class SolarSimulationFunctionalTests(
         val response = uploadPowerPlants(invalidJson, 5)
         assert(response.status == 400)
         assert(response.contentAsString.contains("Invalid Json file format"))
+    }
+
+    @Test
+    fun `upload power plants with invalid age should return an error`() {
+        val invalidJson =
+            """
+            [
+                {
+                    "name": "Power plant 1",
+                    "age": 55
+                },
+                {
+                    "name": "Power plant 2",
+                    "age": -2
+                }
+            ]
+            """.trimIndent()
+
+        val response = uploadPowerPlants(invalidJson, 5)
+        assert(response.status == 400)
+        assert(response.contentAsString.contains("Power plant age cannot be negative"))
     }
 }

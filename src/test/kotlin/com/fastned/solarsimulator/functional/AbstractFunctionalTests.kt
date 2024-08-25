@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.io.File
+import kotlin.random.Random
 
 @ActiveProfiles("test")
 abstract class AbstractFunctionalTests(
@@ -46,8 +47,6 @@ abstract class AbstractFunctionalTests(
         val url = "/solar-simulator/output/{id}"
         return mockMvc
             .perform(get(url, T))
-            .andExpect(status().isOk)
-            .andExpect(content().string(org.hamcrest.Matchers.notNullValue()))
             .andReturn()
             .response
     }
@@ -62,9 +61,7 @@ abstract class AbstractFunctionalTests(
                 post(url)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(powerPlants)),
-            ).andExpect(status().isResetContent)
-            .andExpect(content().string(org.hamcrest.Matchers.notNullValue()))
-            .andReturn()
+            ).andReturn()
             .response
     }
 
@@ -87,4 +84,11 @@ abstract class AbstractFunctionalTests(
         jsonFile.delete()
         return response
     }
+
+    fun generateRandomString(length: Int): String {
+        val alphabet = ('a'..'z') + ('A'..'Z')
+        return List(length) { alphabet.random() }.joinToString("")
+    }
+
+    fun generateRandomAge(): Int = Random.nextInt(1, 10000)
 }

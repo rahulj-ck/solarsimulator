@@ -4,7 +4,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 object SolarCumulativeOutputMap {
-    private const val MAX_POWER_PLANT_AGE = 9125
+    const val MAX_POWER_PLANT_AGE = 9125
     val solarOutputCumulativeMap: Map<Int, BigDecimal> = generateSolarOutputMap()
 
     private fun generateSolarOutputMap(): Map<Int, BigDecimal> =

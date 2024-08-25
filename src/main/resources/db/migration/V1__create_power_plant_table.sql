@@ -1,7 +1,7 @@
 CREATE TABLE power_plant (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    setup_on VARCHAR(255),
+    setup_on DATE,
     operational BOOLEAN
 );
 

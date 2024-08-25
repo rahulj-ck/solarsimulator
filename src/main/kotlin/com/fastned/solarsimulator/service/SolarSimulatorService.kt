@@ -29,9 +29,12 @@ class SolarSimulatorService(
         age: Int,
         t: Int,
     ): BigDecimal {
+        val cappedTPlusAge = minOf(t + age - 1, SolarCumulativeOutputMap.MAX_POWER_PLANT_AGE)
+        val cappedAgeMinusOne = minOf(age - 1, SolarCumulativeOutputMap.MAX_POWER_PLANT_AGE)
+
         val solarOutput =
-            SolarCumulativeOutputMap.solarOutputCumulativeMap.getOrDefault(t + age - 1, BigDecimal.ZERO).subtract(
-                SolarCumulativeOutputMap.solarOutputCumulativeMap.getOrDefault(age - 1, BigDecimal.ZERO),
+            SolarCumulativeOutputMap.solarOutputCumulativeMap.getOrDefault(cappedTPlusAge, BigDecimal.ZERO).subtract(
+                SolarCumulativeOutputMap.solarOutputCumulativeMap.getOrDefault(cappedAgeMinusOne, BigDecimal.ZERO),
             )
         return solarOutput.multiply(SUN_HOURS_PER_DAY).setScale(10, RoundingMode.HALF_UP).stripTrailingZeros()
     }
@@ -41,7 +44,7 @@ class SolarSimulatorService(
         val powerPlants = powerPlantDb.getAll()
         return powerPlants.map {
             val powerOutput = calculatePowerOutput(it.age, t)
-            PowerPlantOutput(it.name, it.age, powerOutput)
+            PowerPlantOutput(it.name, it.age + t - 1, powerOutput)
         }
     }
 
