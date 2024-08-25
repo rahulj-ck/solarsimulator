@@ -1,0 +1,153 @@
+openapi: 3.0.0
+info:
+  title: Fastned Solar Power Plant Network API
+  description: A web service to simulate the output of solar power plants over a period of time.
+  version: 1.0.0
+paths:
+
+  /solar-simulator/upload:
+    post:
+      summary: Upload a file with a list of power plants and return energy production for T days.
+      operationId: uploadPowerPlants
+      tags:
+        - Solar Simulator
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                T:
+                  type: integer
+                  description: The number of days from today for which energy production needs to be calculated.
+                file:
+                  type: string
+                  format: binary
+                  description: The JSON file containing the network of power plants.
+              required:
+                - T
+                - file
+      responses:
+        '200':
+          description: Energy production and network state calculated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationResultResponse'
+        '400':
+          description: Invalid input data.
+        '500':
+          description: Internal server error.
+  /solar-simulator/load:
+    post:
+      summary: Load the network of power plants and reset the previous state.
+      operationId: loadPowerPlants
+      tags:
+        - Solar Simulator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PowerPlant'
+      responses:
+        '205':
+          description: Network loaded and previous state cleared
+  /solar-simulator/output/{T}:
+    get:
+      summary: Query the total output of all power plants for a given number of days.
+      operationId: getNetworkOutput
+      tags:
+        - Solar Simulator
+      parameters:
+        - name: T
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Total output in kilowatt-hours.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkOutputResponse'
+  /solar-simulator/network/{T}:
+    get:
+      summary: Get the state of the network after T days, including the age and output of each power plant.
+      operationId: getNetworkState
+      tags:
+        - Solar Simulator
+      parameters:
+        - name: T
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Network state at T days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkStateResponse'
+components:
+  schemas:
+    PowerPlant:
+      type: object
+      required:
+        - name
+        - age
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+          description: Age of the power plant in days
+
+    PowerPlantOutput:
+      type: object
+      required:
+        - name
+        - age
+        - output-in-kwh
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+        output-in-kwh:
+          type: number
+          description: Energy output in kilowatt-hours
+
+    SimulationResultResponse:
+      type: object
+      required:
+        - produced-kwh
+        - network
+      properties:
+        produced-kwh:
+          type: number
+        network:
+          type: array
+          items:
+            $ref: '#/components/schemas/PowerPlant'
+
+    NetworkOutputResponse:
+      type: object
+      required:
+        - total-output-in-kwh
+      properties:
+        total-output-in-kwh:
+          type: number
+          description: Total energy output for the network in kilowatt-hours.
+
+    NetworkStateResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/PowerPlantOutput'
+
+
